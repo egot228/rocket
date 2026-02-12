@@ -1,0 +1,163 @@
+:root {
+  --bg: #070916;
+  --surface: rgba(255, 255, 255, 0.08);
+  --surface-border: rgba(255, 255, 255, 0.22);
+  --text: #f3f7ff;
+  --muted: #9db0d0;
+  --accent: #58f7ff;
+  --accent-dark: #2ac6e2;
+  --danger: #ff6488;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, sans-serif;
+  color: var(--text);
+  background: radial-gradient(circle at top, #1f2758 0%, var(--bg) 55%);
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.app-shell { width: min(1120px, 100%); margin: 0 auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.card { padding: 18px; border-radius: 18px; }
+.glass { background: var(--surface); border: 1px solid var(--surface-border); backdrop-filter: blur(16px); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3); }
+.profile-card, .game-card { grid-column: span 2; }
+h1, h2 { margin: 0 0 12px; }
+.subtitle { margin-top: 0; color: var(--muted); }
+
+.user-row, .controls, .finance-grid, .admin-grid { display: grid; gap: 10px; }
+.user-row { grid-template-columns: 1fr auto; align-items: end; }
+.controls { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
+.finance-grid, .admin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: 14px; }
+input, select, button {
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.25);
+  padding: 11px 12px;
+  color: var(--text);
+  background: rgba(6, 11, 36, 0.65);
+}
+button { cursor: pointer; font-weight: 700; }
+button:hover { transform: translateY(-1px); }
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+.accent { background: linear-gradient(135deg, var(--accent), var(--accent-dark)); color: #07142e; border: none; }
+
+.rocket-stage {
+  min-height: 260px;
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 14px;
+  background: linear-gradient(160deg, rgba(84, 244, 255, 0.13), rgba(255, 100, 136, 0.1));
+}
+.sky-glow {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  left: -120px;
+  bottom: -240px;
+  background: radial-gradient(circle, rgba(85, 205, 255, 0.35), transparent 65%);
+}
+.stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(2px 2px at 20% 26%, rgba(255,255,255,0.65), transparent),
+    radial-gradient(2px 2px at 70% 35%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(2px 2px at 85% 20%, rgba(255,255,255,0.5), transparent),
+    radial-gradient(2px 2px at 55% 72%, rgba(255,255,255,0.6), transparent);
+  opacity: 0.6;
+}
+.flight-path {
+  position: absolute;
+  left: 10%;
+  bottom: 12%;
+  width: 72%;
+  height: 64%;
+  border-top: 2px dashed rgba(148, 230, 255, 0.35);
+  border-right: 2px dashed rgba(148, 230, 255, 0.25);
+  border-radius: 0 100% 0 0;
+}
+.multiplier-wrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 4;
+  text-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+}
+#multiplier { font-size: clamp(32px, 6vw, 60px); font-weight: 800; }
+#status { color: var(--muted); margin-top: 4px; text-align: center; }
+
+.rocket {
+  position: absolute;
+  left: 12%;
+  bottom: 12%;
+  width: 74px;
+  height: 28px;
+  border-radius: 100px 70px 70px 100px;
+  background: linear-gradient(90deg, #e8f5ff, #a9c5ff 65%, #7389cc);
+  z-index: 3;
+  transition: transform 100ms linear;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.35);
+}
+.rocket-window {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  left: 20px;
+  top: 7px;
+  background: radial-gradient(circle at 30% 30%, #ecfdff, #73d7ff 72%);
+  border: 1px solid rgba(255,255,255,0.6);
+}
+.rocket-fin {
+  position: absolute;
+  width: 10px;
+  height: 14px;
+  background: linear-gradient(180deg, #f9789c, #ca4467);
+  border-radius: 2px;
+}
+.fin-left { left: 6px; top: -8px; transform: skewX(-18deg); }
+.fin-right { left: 6px; bottom: -8px; transform: skewX(18deg); }
+.rocket-fire {
+  position: absolute;
+  right: -14px;
+  top: 8px;
+  width: 16px;
+  height: 12px;
+  border-radius: 80% 20% 20% 80%;
+  background: linear-gradient(90deg, #ffe9b0, #ffad53 55%, #ff5c5c);
+  animation: flame 0.18s infinite alternate;
+}
+
+.rocket-stage.crashed .rocket { filter: saturate(1.5) hue-rotate(-25deg); }
+.rocket-stage.crashed .rocket-fire { opacity: 0; }
+
+.balances { display: flex; gap: 18px; flex-wrap: wrap; font-size: 18px; }
+#toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(7, 22, 52, 0.96);
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 10px 14px;
+  border-radius: 10px;
+  transform: translateY(150%);
+  transition: transform 0.25s;
+}
+#toast.show { transform: translateY(0); }
+
+@keyframes flame {
+  from { transform: scaleX(1) scaleY(1); }
+  to { transform: scaleX(1.16) scaleY(0.66); }
+}
+
+@media (max-width: 800px) {
+  body { padding: 14px; }
+  .app-shell, .controls, .finance-grid, .admin-grid, .user-row { grid-template-columns: 1fr; }
+  .rocket-stage { min-height: 230px; }
+}

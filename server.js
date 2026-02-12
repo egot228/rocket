@@ -125,7 +125,44 @@ const server = http.createServer(async (req, res) => {
   return sendFile(res, path.join(publicDir, 'index.html'));
 });
 
-const port = Number(process.env.PORT || 3000);
-server.listen(port, () => {
-  console.log(`Mini app ready on http://localhost:${port}`);
-});
+const parsePort = (value, fallback) => {
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+};
+
+const requestedPort = parsePort(process.env.PORT, 3000);
+const maxFallbackAttempts = 10;
+
+const listenWithFallback = (port, attempt = 0) => {
+  server
+    .once('error', (err) => {
+      if (err?.code === 'EADDRINUSE') {
+        const fromEnv = Boolean(process.env.PORT);
+        if (fromEnv) {
+          console.error(`Port ${port} is already in use. Please choose another PORT.`);
+          process.exit(1);
+          return;
+        }
+
+        if (attempt >= maxFallbackAttempts) {
+          console.error(`Could not find a free port in range ${requestedPort}-${requestedPort + maxFallbackAttempts}.`);
+          process.exit(1);
+          return;
+        }
+
+        const nextPort = port + 1;
+        console.warn(`Port ${port} is busy, retrying on ${nextPort}...`);
+        listenWithFallback(nextPort, attempt + 1);
+        return;
+      }
+
+      console.error(err);
+      process.exit(1);
+    })
+    .once('listening', () => {
+      console.log(`Mini app ready on http://localhost:${port}`);
+    })
+    .listen(port);
+};
+
+listenWithFallback(requestedPort);

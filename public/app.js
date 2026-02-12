@@ -16,6 +16,8 @@ const refs = {
   loadUser: $('loadUser'),
   status: $('status'),
   multiplier: $('multiplier'),
+  rocketStage: $('rocketStage'),
+  rocket: $('rocket'),
   currency: $('currency'),
   stake: $('stake'),
   startRound: $('startRound'),
@@ -51,23 +53,43 @@ const refreshUser = async () => {
   refs.starsBalance.textContent = user.stars.toFixed(0);
 };
 
-const stopRound = (reason) => {
+const updateRocketPosition = (progress) => {
+  const x = 8 + progress * 76;
+  const y = 10 + progress * 64;
+  const tilt = -28 + progress * 12;
+  refs.rocket.style.transform = `translate(${x}%, -${y}%) rotate(${tilt}deg)`;
+};
+
+const resetRocket = () => {
+  refs.rocketStage.classList.remove('crashed');
+  refs.rocket.style.transform = 'translate(0, 0) rotate(0deg)';
+  updateRocketPosition(0);
+};
+
+const stopRound = (reason, crashed = false) => {
   state.running = false;
   clearInterval(state.ticker);
   refs.startRound.disabled = false;
   refs.cashout.disabled = true;
   refs.status.textContent = reason;
+  if (crashed) refs.rocketStage.classList.add('crashed');
 };
 
 const runAnimation = () => {
   const started = Date.now();
+  const duration = 18000;
+
   state.ticker = setInterval(async () => {
     const elapsed = (Date.now() - started) / 1000;
-    state.multiplier = Number((1 + elapsed * 0.85 + elapsed ** 1.7 * 0.1).toFixed(2));
+    const curve = elapsed * 0.26 + elapsed ** 1.45 * 0.04;
+    state.multiplier = Number((1 + curve).toFixed(2));
     refs.multiplier.textContent = `${state.multiplier.toFixed(2)}x`;
 
+    const progress = Math.min(1, (Date.now() - started) / duration);
+    updateRocketPosition(progress);
+
     if (state.multiplier >= state.crashPoint) {
-      stopRound(`💥 Краш на ${state.crashPoint}x. Ставка сгорела.`);
+      stopRound(`💥 Краш на ${state.crashPoint}x. Ставка сгорела.`, true);
       await refreshUser();
     }
   }, 80);
@@ -97,7 +119,8 @@ refs.startRound.addEventListener('click', async () => {
 
     refs.startRound.disabled = true;
     refs.cashout.disabled = false;
-    refs.status.textContent = 'Ракета летит...';
+    refs.status.textContent = 'Ракета плавно набирает высоту...';
+    resetRocket();
     runAnimation();
     await refreshUser();
   } catch (e) {
@@ -121,7 +144,7 @@ refs.cashout.addEventListener('click', async () => {
     stopRound(`✅ Успех! Выигрыш ${data.win} ${state.currency.toUpperCase()}`);
     await refreshUser();
   } catch (e) {
-    stopRound(`💥 ${e.message}`);
+    stopRound(`💥 ${e.message}`, true);
     await refreshUser();
   }
 });
@@ -161,4 +184,5 @@ refs.grantBtn.addEventListener('click', async () => {
   }
 });
 
+resetRocket();
 refreshUser().catch((e) => toast(e.message));

@@ -10,7 +10,7 @@
     <main class="app-shell">
       <section class="glass card profile-card">
         <h1>🚀 Crash Mini App</h1>
-        <p class="subtitle">TON + Telegram Stars • премиум UI</p>
+        <p class="subtitle">Общий раунд для всех игроков • TON + Stars</p>
         <div class="user-row">
           <label>
             User ID
@@ -21,19 +21,24 @@
         <div class="balances">
           <div><span>TON:</span> <strong id="tonBalance">0</strong></div>
           <div><span>Stars:</span> <strong id="starsBalance">0</strong></div>
+          <div><span>Раунд:</span> <strong id="roundId">-</strong></div>
         </div>
       </section>
 
       <section class="glass card game-card">
         <div class="rocket-stage" id="rocketStage">
-          <div class="orbit-grid"></div>
+          <div class="sky-glow"></div>
+          <div class="stars"></div>
+          <div class="flight-path"></div>
           <div class="multiplier-wrap">
             <div id="multiplier">1.00x</div>
-            <div id="status">Готов к запуску</div>
+            <div id="status">Ожидание нового раунда</div>
           </div>
           <div class="rocket" id="rocket" aria-hidden="true">
-            <span class="rocket-body">🚀</span>
-            <span class="rocket-fire"></span>
+            <div class="rocket-window"></div>
+            <div class="rocket-fin fin-left"></div>
+            <div class="rocket-fin fin-right"></div>
+            <div class="rocket-fire"></div>
           </div>
         </div>
         <div class="controls">
@@ -48,8 +53,8 @@
             Ставка
             <input id="stake" type="number" min="0.1" step="0.1" value="1" />
           </label>
-          <button id="startRound" class="accent">Старт</button>
-          <button id="cashout" disabled>Кэшаут</button>
+          <button id="startRound" class="accent">Сделать ставку</button>
+          <button id="cashout" disabled>Забрать</button>
         </div>
       </section>
 

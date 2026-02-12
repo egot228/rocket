@@ -1,11 +1,10 @@
 const state = {
   userId: 'demo-user',
-  crashPoint: null,
+  roundId: null,
+  phase: 'betting',
   multiplier: 1,
-  running: false,
-  stake: 0,
-  currency: 'ton',
-  ticker: null
+  activeBet: null,
+  syncTimer: null
 };
 
 const $ = (id) => document.getElementById(id);
@@ -13,6 +12,7 @@ const refs = {
   userId: $('userId'),
   tonBalance: $('tonBalance'),
   starsBalance: $('starsBalance'),
+  roundId: $('roundId'),
   loadUser: $('loadUser'),
   status: $('status'),
   multiplier: $('multiplier'),
@@ -53,99 +53,119 @@ const refreshUser = async () => {
   refs.starsBalance.textContent = user.stars.toFixed(0);
 };
 
-const updateRocketPosition = (progress) => {
-  const x = 8 + progress * 76;
-  const y = 10 + progress * 64;
-  const tilt = -28 + progress * 12;
-  refs.rocket.style.transform = `translate(${x}%, -${y}%) rotate(${tilt}deg)`;
+const updateRocketPosition = (multiplier) => {
+  const normalized = Math.min(1, Math.log(multiplier) / Math.log(8));
+  const x = normalized * 74;
+  const y = normalized * 66;
+  const angle = -4 - normalized * 26;
+  refs.rocket.style.transform = `translate(${x}%, -${y}%) rotate(${angle}deg)`;
 };
 
-const resetRocket = () => {
-  refs.rocketStage.classList.remove('crashed');
-  refs.rocket.style.transform = 'translate(0, 0) rotate(0deg)';
-  updateRocketPosition(0);
+const setCashoutButton = () => {
+  if (!state.activeBet || state.phase !== 'running') {
+    refs.cashout.textContent = 'Забрать';
+    refs.cashout.disabled = true;
+    return;
+  }
+
+  const amount = (state.activeBet.stake * state.multiplier).toFixed(2);
+  refs.cashout.textContent = `Забрать ${amount} ${state.activeBet.currency.toUpperCase()}`;
+  refs.cashout.disabled = false;
 };
 
-const stopRound = (reason, crashed = false) => {
-  state.running = false;
-  clearInterval(state.ticker);
-  refs.startRound.disabled = false;
-  refs.cashout.disabled = true;
-  refs.status.textContent = reason;
-  if (crashed) refs.rocketStage.classList.add('crashed');
+const updatePhaseUi = (round) => {
+  state.phase = round.phase;
+  state.multiplier = round.multiplier;
+  refs.roundId.textContent = round.id;
+  refs.multiplier.textContent = `${round.multiplier.toFixed(2)}x`;
+  updateRocketPosition(round.multiplier);
+
+  if (round.phase === 'betting') {
+    refs.rocketStage.classList.remove('crashed');
+    refs.status.textContent = `Ставки открыты • старт через ${round.secondsToStart.toFixed(1)}с`;
+    refs.startRound.disabled = false;
+    refs.startRound.textContent = state.activeBet ? 'Ставка принята' : 'Сделать ставку';
+  } else if (round.phase === 'running') {
+    refs.status.textContent = 'Ракета летит: сначала медленно, потом ускоряется';
+    refs.startRound.disabled = true;
+    refs.startRound.textContent = 'Раунд в процессе';
+  } else {
+    refs.rocketStage.classList.add('crashed');
+    refs.status.textContent = `💥 Краш на ${round.crashPoint.toFixed(2)}x • новый раунд через ${round.secondsToNext.toFixed(1)}с`;
+    refs.startRound.disabled = true;
+    refs.startRound.textContent = 'Ожидание раунда';
+  }
+
+  setCashoutButton();
 };
 
-const runAnimation = () => {
-  const started = Date.now();
-  const duration = 18000;
+const syncRound = async () => {
+  const round = await api('/api/game/round');
+  state.roundId = round.id;
 
-  state.ticker = setInterval(async () => {
-    const elapsed = (Date.now() - started) / 1000;
-    const curve = elapsed * 0.26 + elapsed ** 1.45 * 0.04;
-    state.multiplier = Number((1 + curve).toFixed(2));
-    refs.multiplier.textContent = `${state.multiplier.toFixed(2)}x`;
+  const bet = await api(`/api/game/bet/${state.userId}`);
+  state.activeBet = bet.active ? bet : null;
 
-    const progress = Math.min(1, (Date.now() - started) / duration);
-    updateRocketPosition(progress);
+  if (state.activeBet && state.activeBet.roundId !== round.id) {
+    state.activeBet = null;
+  }
 
-    if (state.multiplier >= state.crashPoint) {
-      stopRound(`💥 Краш на ${state.crashPoint}x. Ставка сгорела.`, true);
-      await refreshUser();
-    }
-  }, 80);
+  updatePhaseUi(round);
 };
 
 refs.loadUser.addEventListener('click', async () => {
   state.userId = refs.userId.value.trim() || 'demo-user';
   await refreshUser();
+  await syncRound();
   toast('Профиль обновлён');
 });
 
 refs.startRound.addEventListener('click', async () => {
   try {
-    const stake = Number(refs.stake.value);
-    const currency = refs.currency.value;
+    if (state.phase !== 'betting') {
+      toast('Ставки в этом раунде уже закрыты');
+      return;
+    }
+    if (state.activeBet) {
+      toast('Вы уже участвуете в текущем раунде');
+      return;
+    }
 
-    const data = await api('/api/game/start', {
+    await api('/api/game/bet', {
       method: 'POST',
-      body: JSON.stringify({ userId: state.userId, stake, currency })
+      body: JSON.stringify({
+        userId: state.userId,
+        stake: Number(refs.stake.value),
+        currency: refs.currency.value,
+        roundId: state.roundId
+      })
     });
 
-    state.running = true;
-    state.stake = stake;
-    state.currency = currency;
-    state.crashPoint = data.crashPoint;
-    state.multiplier = 1;
-
-    refs.startRound.disabled = true;
-    refs.cashout.disabled = false;
-    refs.status.textContent = 'Ракета плавно набирает высоту...';
-    resetRocket();
-    runAnimation();
     await refreshUser();
+    await syncRound();
+    toast('Ставка принята в общий раунд');
   } catch (e) {
     toast(e.message);
   }
 });
 
 refs.cashout.addEventListener('click', async () => {
-  if (!state.running) return;
+  if (!state.activeBet || state.phase !== 'running') return;
+
   try {
     const data = await api('/api/game/cashout', {
       method: 'POST',
-      body: JSON.stringify({
-        userId: state.userId,
-        currency: state.currency,
-        stake: state.stake,
-        multiplier: state.multiplier,
-        crashPoint: state.crashPoint
-      })
+      body: JSON.stringify({ userId: state.userId, roundId: state.roundId })
     });
-    stopRound(`✅ Успех! Выигрыш ${data.win} ${state.currency.toUpperCase()}`);
+
+    state.activeBet = null;
+    setCashoutButton();
     await refreshUser();
+    await syncRound();
+    toast(`✅ Забрано: ${data.win} ${data.currency.toUpperCase()} на ${data.multiplier.toFixed(2)}x`);
   } catch (e) {
-    stopRound(`💥 ${e.message}`, true);
-    await refreshUser();
+    toast(e.message);
+    await syncRound();
   }
 });
 
@@ -184,5 +204,12 @@ refs.grantBtn.addEventListener('click', async () => {
   }
 });
 
-resetRocket();
-refreshUser().catch((e) => toast(e.message));
+const boot = async () => {
+  await refreshUser();
+  await syncRound();
+  state.syncTimer = setInterval(() => {
+    syncRound().catch((e) => toast(e.message));
+  }, 220);
+};
+
+boot().catch((e) => toast(e.message));

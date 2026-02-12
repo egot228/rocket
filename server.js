@@ -19,10 +19,76 @@ const ensureUser = (id) => {
   return users.get(id);
 };
 
-const roundCrashPoint = () => {
+const randomCrashPoint = () => {
   const r = Math.random();
-  const point = 1.05 + (1 / (1 - r) - 1) * 0.75;
-  return Math.min(Number(point.toFixed(2)), 20);
+  const point = 1.25 + (1 / (1 - r) - 1) * 0.85;
+  return Math.min(Number(point.toFixed(2)), 22);
+};
+
+const createRound = () => ({
+  id: `r-${Date.now()}`,
+  prepMs: 7000,
+  createdAt: Date.now(),
+  startedAt: null,
+  crashedAt: null,
+  crashPoint: randomCrashPoint(),
+  bets: new Map()
+});
+
+let round = createRound();
+
+const getMultiplierByElapsed = (seconds) => {
+  const value = 1 + seconds * 0.14 + seconds ** 2 * 0.075;
+  return Number(value.toFixed(2));
+};
+
+const settleRoundState = () => {
+  const now = Date.now();
+
+  if (!round.startedAt && now - round.createdAt >= round.prepMs) {
+    round.startedAt = round.createdAt + round.prepMs;
+  }
+
+  if (round.startedAt && !round.crashedAt) {
+    const elapsed = (now - round.startedAt) / 1000;
+    const multiplier = getMultiplierByElapsed(Math.max(elapsed, 0));
+    if (multiplier >= round.crashPoint) round.crashedAt = now;
+  }
+
+  if (round.crashedAt && now - round.crashedAt >= 4500) {
+    round = createRound();
+  }
+};
+
+const getRoundSnapshot = () => {
+  settleRoundState();
+  const now = Date.now();
+
+  if (!round.startedAt) {
+    return {
+      id: round.id,
+      phase: 'betting',
+      multiplier: 1,
+      secondsToStart: Number(Math.max((round.prepMs - (now - round.createdAt)) / 1000, 0).toFixed(1))
+    };
+  }
+
+  if (round.crashedAt) {
+    return {
+      id: round.id,
+      phase: 'crashed',
+      multiplier: round.crashPoint,
+      crashPoint: round.crashPoint,
+      secondsToNext: Number(Math.max((4500 - (now - round.crashedAt)) / 1000, 0).toFixed(1))
+    };
+  }
+
+  const elapsed = Math.max((now - round.startedAt) / 1000, 0);
+  return {
+    id: round.id,
+    phase: 'running',
+    multiplier: getMultiplierByElapsed(elapsed)
+  };
 };
 
 const sendJson = (res, status, payload) => {
@@ -35,11 +101,7 @@ const sendFile = async (res, filePath) => {
     const content = await fs.readFile(filePath);
     const ext = path.extname(filePath);
     const contentType =
-      ext === '.css'
-        ? 'text/css; charset=utf-8'
-        : ext === '.js'
-          ? 'application/javascript; charset=utf-8'
-          : 'text/html; charset=utf-8';
+      ext === '.css' ? 'text/css; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : 'text/html; charset=utf-8';
     res.writeHead(200, { 'Content-Type': contentType });
     res.end(content);
   } catch {
@@ -88,39 +150,73 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { ok: true, balance: user });
   }
 
-  if (req.method === 'POST' && url.pathname === '/api/game/start') {
-    const { userId, stake, currency } = await readBody(req);
+  if (req.method === 'GET' && url.pathname === '/api/game/round') {
+    return sendJson(res, 200, getRoundSnapshot());
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/game/bet') {
+    const { userId, stake, currency, roundId } = await readBody(req);
+    settleRoundState();
     const user = ensureUser(userId);
     const bet = Number(stake);
+
     if (!user || !['ton', 'stars'].includes(currency) || !Number.isFinite(bet) || bet <= 0) {
       return sendJson(res, 400, { error: 'Некорректная ставка.' });
     }
+    if (round.startedAt) return sendJson(res, 400, { error: 'Ставки на этот раунд уже закрыты.' });
+    if (roundId && roundId !== round.id) return sendJson(res, 409, { error: 'Раунд уже сменился. Обновите экран.' });
+    if (round.bets.has(userId)) return sendJson(res, 400, { error: 'Ставка на раунд уже сделана.' });
     if (user[currency] < bet) return sendJson(res, 400, { error: 'Недостаточно средств.' });
+
     user[currency] = Number((user[currency] - bet).toFixed(2));
-    return sendJson(res, 200, { ok: true, stake: bet, currency, crashPoint: roundCrashPoint(), balance: user });
+    round.bets.set(userId, { stake: bet, currency, cashedOut: false, win: 0 });
+
+    return sendJson(res, 200, { ok: true, roundId: round.id, balance: user });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/game/cashout') {
-    const { userId, currency, stake, multiplier, crashPoint } = await readBody(req);
+    const { userId, roundId } = await readBody(req);
+    settleRoundState();
     const user = ensureUser(userId);
-    const m = Number(multiplier);
-    const cp = Number(crashPoint);
-    const s = Number(stake);
-    if (!user || !Number.isFinite(m) || !Number.isFinite(cp) || !Number.isFinite(s)) {
-      return sendJson(res, 400, { error: 'Некорректные параметры кэшаута.' });
+
+    if (!user || !round.bets.has(userId)) return sendJson(res, 400, { error: 'Активная ставка не найдена.' });
+    if (roundId && roundId !== round.id) return sendJson(res, 409, { error: 'Раунд уже завершён.' });
+    if (!round.startedAt || round.crashedAt) return sendJson(res, 400, { error: 'Кэшаут недоступен в текущей фазе.' });
+
+    const bet = round.bets.get(userId);
+    if (bet.cashedOut) return sendJson(res, 400, { error: 'Ставка уже забрана.' });
+
+    const multiplier = getMultiplierByElapsed(Math.max((Date.now() - round.startedAt) / 1000, 0));
+    if (multiplier >= round.crashPoint) {
+      round.crashedAt = Date.now();
+      return sendJson(res, 400, { error: 'Слишком поздно, ракета уже взорвалась.' });
     }
-    if (m >= cp) return sendJson(res, 400, { error: 'Слишком поздно, ракета уже взорвалась.' });
-    const win = Number((s * m).toFixed(2));
-    user[currency] = Number((user[currency] + win).toFixed(2));
-    return sendJson(res, 200, { ok: true, win, balance: user });
+
+    const win = Number((bet.stake * multiplier).toFixed(2));
+    user[bet.currency] = Number((user[bet.currency] + win).toFixed(2));
+    bet.cashedOut = true;
+    bet.win = win;
+
+    return sendJson(res, 200, { ok: true, win, multiplier, currency: bet.currency, balance: user });
   }
 
-  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-    return sendFile(res, path.join(publicDir, 'index.html'));
+  if (req.method === 'GET' && url.pathname.startsWith('/api/game/bet/')) {
+    settleRoundState();
+    const userId = decodeURIComponent(url.pathname.split('/').pop());
+    const bet = round.bets.get(userId);
+    if (!bet || bet.cashedOut) return sendJson(res, 200, { active: false, roundId: round.id });
+    const snapshot = getRoundSnapshot();
+    return sendJson(res, 200, {
+      active: true,
+      roundId: round.id,
+      currency: bet.currency,
+      stake: bet.stake,
+      potentialWin: Number((bet.stake * snapshot.multiplier).toFixed(2))
+    });
   }
-  if (req.method === 'GET' && (url.pathname === '/styles.css' || url.pathname === '/app.js')) {
-    return sendFile(res, path.join(publicDir, url.pathname.slice(1)));
-  }
+
+  if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return sendFile(res, path.join(publicDir, 'index.html'));
+  if (req.method === 'GET' && (url.pathname === '/styles.css' || url.pathname === '/app.js')) return sendFile(res, path.join(publicDir, url.pathname.slice(1)));
 
   return sendFile(res, path.join(publicDir, 'index.html'));
 });
@@ -137,31 +233,25 @@ const listenWithFallback = (port, attempt = 0) => {
   server
     .once('error', (err) => {
       if (err?.code === 'EADDRINUSE') {
-        const fromEnv = Boolean(process.env.PORT);
-        if (fromEnv) {
+        if (process.env.PORT) {
           console.error(`Port ${port} is already in use. Please choose another PORT.`);
           process.exit(1);
           return;
         }
-
         if (attempt >= maxFallbackAttempts) {
           console.error(`Could not find a free port in range ${requestedPort}-${requestedPort + maxFallbackAttempts}.`);
           process.exit(1);
           return;
         }
-
         const nextPort = port + 1;
         console.warn(`Port ${port} is busy, retrying on ${nextPort}...`);
         listenWithFallback(nextPort, attempt + 1);
         return;
       }
-
       console.error(err);
       process.exit(1);
     })
-    .once('listening', () => {
-      console.log(`Mini app ready on http://localhost:${port}`);
-    })
+    .once('listening', () => console.log(`Mini app ready on http://localhost:${port}`))
     .listen(port);
 };
 

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Crash Rocket Mini App</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="glass card profile-card">
+        <h1>🚀 Crash Mini App</h1>
+        <p class="subtitle">TON + Telegram Stars • премиум UI</p>
+        <div class="user-row">
+          <label>
+            User ID
+            <input id="userId" value="demo-user" />
+          </label>
+          <button id="loadUser">Загрузить</button>
+        </div>
+        <div class="balances">
+          <div><span>TON:</span> <strong id="tonBalance">0</strong></div>
+          <div><span>Stars:</span> <strong id="starsBalance">0</strong></div>
+        </div>
+      </section>
+
+      <section class="glass card game-card">
+        <div class="rocket-stage" id="rocketStage">
+          <div class="orbit-grid"></div>
+          <div class="multiplier-wrap">
+            <div id="multiplier">1.00x</div>
+            <div id="status">Готов к запуску</div>
+          </div>
+          <div class="rocket" id="rocket" aria-hidden="true">
+            <span class="rocket-body">🚀</span>
+            <span class="rocket-fire"></span>
+          </div>
+        </div>
+        <div class="controls">
+          <label>
+            Валюта
+            <select id="currency">
+              <option value="ton">TON</option>
+              <option value="stars">Stars</option>
+            </select>
+          </label>
+          <label>
+            Ставка
+            <input id="stake" type="number" min="0.1" step="0.1" value="1" />
+          </label>
+          <button id="startRound" class="accent">Старт</button>
+          <button id="cashout" disabled>Кэшаут</button>
+        </div>
+      </section>
+
+      <section class="glass card finance-card">
+        <h2>Пополнение</h2>
+        <div class="finance-grid">
+          <label>
+            TON
+            <input id="topupTon" type="number" min="0.1" step="0.1" value="5" />
+          </label>
+          <button data-topup="ton">Пополнить TON</button>
+          <label>
+            Stars
+            <input id="topupStars" type="number" min="1" step="1" value="100" />
+          </label>
+          <button data-topup="stars">Пополнить Stars</button>
+        </div>
+      </section>
+
+      <section class="glass card admin-card">
+        <h2>Админ панель</h2>
+        <div class="admin-grid">
+          <label>
+            Admin key
+            <input id="adminKey" value="super-admin-key" />
+          </label>
+          <label>
+            Выдать TON
+            <input id="grantTon" type="number" step="0.1" value="0" />
+          </label>
+          <label>
+            Выдать Stars
+            <input id="grantStars" type="number" step="1" value="0" />
+          </label>
+          <button id="grantBtn">Выдать баланс</button>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast"></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

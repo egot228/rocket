@@ -1,0 +1,11 @@
+{
+  "name": "rocket-crash-miniapp",
+  "version": "1.0.0",
+  "description": "Telegram Mini App crash game with TON and Stars balances",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}
